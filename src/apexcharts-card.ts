@@ -35,6 +35,7 @@ import {
   validateOffset,
 } from './utils';
 import ApexCharts from 'apexcharts';
+import { ApexOptions } from 'apexcharts';
 import { Ripple } from '@material/mwc-ripple';
 import { stylesApex } from './styles';
 import { HassEntity } from 'home-assistant-js-websocket';
@@ -75,6 +76,7 @@ import {
 import parse from 'parse-duration';
 import tinycolor from '@ctrl/tinycolor';
 import { actionHandler } from './action-handler-directive';
+import { now } from 'moment';
 
 /* eslint no-console: 0 */
 console.info(
@@ -156,6 +158,8 @@ class ChartsCard extends LitElement {
 
   private _yAxisConfig?: ChartCardYAxis[];
 
+  private _dateSpan: { start: Date; end: Date } = { start: new Date(0), end: new Date(0) };
+
   @property({ attribute: false }) _lastUpdated: Date = new Date();
 
   @property({ type: Boolean }) private _warning = false;
@@ -188,7 +192,7 @@ class ChartsCard extends LitElement {
   }
 
   private _updateOnInterval(): void {
-    if (!this._updating && this.hass) {
+    if (!this._updating && this._hass) {
       this._updating = true;
       this._updateData();
     }
@@ -448,8 +452,6 @@ class ChartsCard extends LitElement {
             const graphEntry = new GraphEntry(
               index,
               // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              this._graphSpan!,
-              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
               caching,
               serie,
               this._config?.span,
@@ -702,6 +704,35 @@ class ChartsCard extends LitElement {
     return html``;
   }
 
+  public apexZoomed(_chart: any, options?: any) {
+    // console.info('apex zoomed start: ' + new Date(options.xaxis.min));
+    // console.info('apex zoomed end: ' + new Date(options.xaxis.max));
+    this._dateSpan = { start: new Date(options.xaxis.min), end: new Date(options.xaxis.max) };
+
+    if (!this._updating && this._hass) {
+      this._updating = true;
+      this._updateData();
+    }
+  }
+
+  public apexBeforeZoom(_chart: any, options?: any) {
+    let end = options.xaxis.max;
+    const now = new Date().getTime();
+    if (end > now) {
+      end = now;
+    }
+    options.xaxis.max = end;
+  }
+
+  public apexBeforeResetZoom(_chart: any, _options?: any) {
+    this._dateSpan = { start: new Date(0), end: new Date(0) };
+
+    if (!this._updating && this._hass) {
+      this._updating = true;
+      this._updateData();
+    }
+  }
+
   private async _initialLoad() {
     await this.updateComplete;
 
@@ -711,8 +742,15 @@ class ChartsCard extends LitElement {
       const layout = getLayoutConfig(this._config, this._hass, this._graphs);
       if (this._config.series_in_brush.length) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (layout as any).chart.id = Math.random().toString(36).substring(7);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        (layout as ApexOptions).chart!.id = Math.random().toString(36).substring(7);
       }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      (layout! as ApexOptions).chart!.events!.zoomed = this.apexZoomed.bind(this);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      (layout! as ApexOptions).chart!.events!.beforeZoom = this.apexBeforeZoom.bind(this);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      (layout! as ApexOptions).chart!.events!.beforeResetZoom = this.apexBeforeResetZoom.bind(this);
       this._apexChart = new ApexCharts(graph, layout);
       this._apexChart.render();
       if (this._config.series_in_brush.length) {
@@ -732,6 +770,8 @@ class ChartsCard extends LitElement {
     if (!this._config || !this._apexChart || !this._graphs) return;
 
     const { start, end } = this._getSpanDates();
+    // console.info('_updateData start: ' + start);
+    // console.info('_updateData end: ' + end);
     const now = new Date();
     this._lastUpdated = now;
     const editMode = getLovelace()?.editMode;
@@ -1374,18 +1414,25 @@ class ChartsCard extends LitElement {
   }
 
   private _getSpanDates(): { start: Date; end: Date } {
+    let graphspan = this._graphSpan;
     let end = new Date();
-    let start = new Date(end.getTime() - this._graphSpan + 1);
+    let start = new Date(end.getTime() - graphspan + 1);
+    if (this._dateSpan.start.getTime() && this._dateSpan.end.getTime()) {
+      start = this._dateSpan.start;
+      end = this._dateSpan.end;
+      graphspan = this._dateSpan.end.getTime() - this._dateSpan.start.getTime();
+    }
+
     // Span
     if (this._config?.span?.start) {
       // Just Span
       const startM = moment().startOf(this._config.span.start);
       start = startM.toDate();
-      end = new Date(start.getTime() + this._graphSpan);
+      end = new Date(start.getTime() + graphspan);
     } else if (this._config?.span?.end) {
       const endM = moment().endOf(this._config.span.end);
       end = new Date(endM.toDate().getTime() + 1);
-      start = new Date(end.getTime() - this._graphSpan + 1);
+      start = new Date(end.getTime() - graphspan + 1);
     }
     if (this._offset) {
       end.setTime(end.getTime() + this._offset);

@@ -40,6 +40,10 @@ export function getLayoutConfig(
       toolbar: {
         show: false,
       },
+      events: {
+        zoomed: null,
+        beforeResetZoom: null,
+      },
     },
     grid: {
       strokeDashArray: 3,

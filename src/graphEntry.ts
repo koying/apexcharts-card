@@ -53,13 +53,7 @@ export default class GraphEntry {
 
   private _md5Config: string;
 
-  constructor(
-    index: number,
-    graphSpan: number,
-    cache: boolean,
-    config: ChartCardSeriesConfig,
-    span: ChartCardSpanExtConfig | undefined,
-  ) {
+  constructor(index: number, cache: boolean, config: ChartCardSeriesConfig, span: ChartCardSpanExtConfig | undefined) {
     const aggregateFuncMap = {
       avg: this._average,
       max: this._maximum,
@@ -74,11 +68,11 @@ export default class GraphEntry {
     this._index = index;
     this._cache = cache;
     this._entityID = config.entity;
-    this._graphSpan = graphSpan;
     this._config = config;
     this._func = aggregateFuncMap[config.group_by.func];
     this._realEnd = new Date();
     this._realStart = new Date();
+    this._graphSpan = 0;
     // Valid because tested during init;
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     this._groupByDurationMs = parse(this._config.group_by.duration)!;
@@ -181,6 +175,8 @@ export default class GraphEntry {
   }
 
   public async _updateHistory(start: Date, end: Date): Promise<boolean> {
+    // console.info('_updateHistory start: ' + start);
+    // console.info('_updateHistory end: ' + end);
     let startHistory = new Date(start);
     if (this._config.group_by.func !== 'raw') {
       const range = end.getTime() - start.getTime();
@@ -192,6 +188,7 @@ export default class GraphEntry {
 
     this._realStart = new Date(start);
     this._realEnd = new Date(end);
+    this._graphSpan = end.getTime() - start.getTime();
 
     let skipInitialState = false;
 
@@ -417,8 +414,8 @@ export default class GraphEntry {
     period: 'hour' | '5minute' = 'hour',
   ): Promise<Statistics | undefined> {
     const statistic_ids: string[] = [this._entityID];
-    console.info('apex start: ' + start?.toISOString());
-    console.info('apex end: ' + end?.toISOString());
+    // console.info('_fetchStatistics start: ' + start?.toISOString());
+    // console.info('_fetchStatistics end: ' + end?.toISOString());
     return this._hass?.callWS<Statistics>({
       type: 'history/statistics_during_period',
       start_time: start?.toISOString(),

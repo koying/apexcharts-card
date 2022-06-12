@@ -3,7 +3,7 @@
   "image": "ghcr.io/ludeeus/devcontainer/generic:latest",
   "context": "..",
   "remoteUser": "vscode",
-  "appPort": ["8123:8123", "5000:5000"],
+  "appPort": ["6123:8123", "6000:5000"],
   "postCreateCommand": "npm ci && sudo container install",
   "extensions": [
     "github.vscode-pull-request-github",
